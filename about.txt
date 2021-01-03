@@ -1,0 +1,14 @@
+MasedaApp
+Versão 1.0
+Licenciada pela GPL
+Agradecimentos:
+  - Márcio Comba
+  - Fanuel Ramos
+  - Evidencia David
+  - Duely Diantantu
+  - Amilcar Jose
+  - Vanio Cassinda
+  - Alberto Lopes
+E-mail: acebox@gmail.com
+Tel: x.x.x.x
+Feito com amor pela acebox © 2019
