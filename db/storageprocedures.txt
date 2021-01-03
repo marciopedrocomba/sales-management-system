@@ -1,0 +1,150 @@
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `produtoEntradaAdicionar`(IN `data` DATE, IN `quantidade` INT, IN `fornecedorId` INT, IN `produtoId` INT)
+begin
+
+	declare produtoQuantidadeStock, checkProduto, quantidadeEntrada int;
+    
+    
+    set produtoQuantidadeStock = (select produto.quantidade from produto where ID = `produtoId`);
+    set checkProduto = (select count(*) from produto_Entrada where produto_Entrada.`Data` = curdate()
+    and produto_Entrada.`Fornecedor` = `fornecedorId` and produto_Entrada.`Produto` = `produtoId`);
+    set quantidadeEntrada = (select produto_Entrada.`Quantidade` from produto_Entrada where produto_Entrada.`Data` = curdate()
+    and produto_Entrada.`Fornecedor` = `fornecedorId` and produto_Entrada.`Produto` = `produtoId`);
+	
+    if(checkProduto > 0) then
+		update produto_Entrada set produto_Entrada.`Quantidade` = (quantidadeEntrada + `quantidade`)  where produto_Entrada.`Data` = curdate()
+		and produto_Entrada.`Fornecedor` = `fornecedorId` and produto_Entrada.`Produto` = `produtoId`;
+    else		
+        INSERT INTO Produto_Entrada (Produto_Entrada.Data, Produto_Entrada.Quantidade, Produto_Entrada.Fornecedor, 
+		Produto_Entrada.Produto) VALUES (`data`, `quantidade`, `fornecedorId`, `produtoId`);
+    end if;
+    
+    update produto set quantidade = (produtoQuantidadeStock + `quantidade`) where produto.ID = `produtoId`;
+
+end$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `encomedaAdicionar`(`servicoId` INT, `estadoId` INT, `clienteId` INT, `idCategoria` INT, `quantidade` INT, `data` DATE, OUT `Qout` INT)
+begin
+
+	declare pQuantidade, idProduto, checkEncomenda, estado, quantidadeEncomendada int;
+    set idProduto = (select ID from produto where categoria = idCategoria);
+    set pQuantidade = (select produto.`quantidade` from produto where ID = idProduto);
+	set estado = (select estado_encomenda.ID from estado_encomenda where estado_encomenda.Nome = 'em processo');
+    set checkEncomenda = (select count(*) from encomenda where encomenda.produto = idProduto and encomenda.estado = estado and encomenda.cliente = `clienteId`);
+    set  quantidadeEncomendada = (select encomenda.quantidade from encomenda where 
+            encomenda.produto = idProduto and encomenda.estado = estado and encomenda.cliente = `clienteId`);
+    
+    if(pQuantidade > 0 and `quantidade` > 0 and `quantidade` <= pQuantidade)then
+		if(checkEncomenda > 0) then
+			update encomenda set encomenda.quantidade = (quantidadeEncomendada + `quantidade`) where encomenda.produto = idProduto and encomenda.estado = estado and encomenda.cliente = `clienteId`;
+        else
+			insert into encomenda(encomenda.`Servico`, encomenda.`Estado`, encomenda.`Cliente`, encomenda.`produto`,
+			encomenda.`quantidade`, encomenda.`data`) values(servicoId, estadoId, clienteId, idProduto, quantidade, data);
+        end if;
+        
+        update produto set produto.`quantidade` = (pQuantidade-quantidade) where ID = idProduto;
+        
+     else 
+	
+        if(pQuantidade = 0) then 
+			select 1 into Qout;
+		else
+			select produto.`quantidade` from produto where ID = idProduto into Qout;
+        end if;
+        
+    end if;
+end$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `produtosVendidos`(IN `idCategoria` INT, IN `quantidade` INT)
+begin
+
+	declare lastVenda, pQuantidade, idProduto, updateStock int;
+    
+    set lastVenda = (select max(ID) from venda);
+    set idProduto = (select ID from produto where categoria = idCategoria);
+    set pQuantidade = (select produto.`quantidade` from produto where ID = idProduto);
+    if(pQuantidade > 0)then
+		insert into item_vendido(produto, venda, quantidade)
+		values(idProduto, lastVenda, quantidade);
+		update produto set produto.`quantidade` = ((pQuantidade-quantidade)) where ID=idProduto;
+    end if;
+
+end$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `produtosVendidoEncomenda`(IN `idEncomenda` INT)
+begin
+
+	declare lastVenda, estado int;
+    
+    set lastVenda = (select max(ID) from venda_servico);
+    set estado = (select estado_encomenda.ID from estado_encomenda where estado_encomenda.Nome = 'efectuada');
+	insert into item_encomendado(encomenda, venda)
+	values(idEncomenda, lastVenda);
+	
+    update encomenda set encomenda.estado = estado where encomenda.ID = idEncomenda;
+end$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `totalVendas`(OUT `total` INT)
+begin
+
+	declare tVenda, tVendaServico int;
+    
+    set tVenda = (select count(*) FROM venda where venda.`Data` = curdate());
+    set tVendaServico = (select count(*) from Venda_Servico WHERE Venda_Servico.`Data` = CURDATE());
+    
+    select (tVenda + tVendaServico) into total;
+
+end$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `removeEncomenda`(IN `encomendaId` INT, IN `idCategoria` INT)
+begin 
+	declare idProduto, estado, quantidade, quantidadeProduto int;
+    declare estadoNome varchar(30);
+    set idProduto = (select ID from produto where categoria = idCategoria);
+    set estado = (select estado_encomenda.ID from estado_encomenda where estado_encomenda.Nome != 'efectuada');
+    set quantidade = (select encomenda.quantidade from encomenda where encomenda.ID = encomendaId and encomenda.estado  = estado);
+	set quantidadeProduto = (select produto.quantidade from produto where produto.ID = idProduto);
+    set estadoNome = (select estado_encomenda.Nome from estado_encomenda where estado_encomenda.ID = estado);
+    if(estadoNome != 'efectuada') then
+		delete from encomenda where encomenda.ID = encomendaId and encomenda.estado  = estado;
+		update produto set produto.quantidade = quantidadeProduto + quantidade where produto.ID = idProduto;
+    end if;
+end$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vender`(IN `tipoPagamento` INT, IN `valorDinheiro` FLOAT, IN `valorCartao` FLOAT, IN `cliente` INT, IN `funcionario` VARCHAR(30))
+begin 
+	declare lastIdPagamento int;
+	insert into pagamento(Tipo, Valor_apagar, valor_dinheiro, valor_cartao) values(tipoPagamento, (valorDinheiro+valorCartao),
+    valorDinheiro, valorCartao);
+    set lastIdPagamento = (select max(ID) from pagamento);
+    insert into venda(venda.Pagamento, venda.Cliente, venda.Funcionario, venda.Data)
+    values(lastIdPagamento, cliente, funcionario, curdate());
+end$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `venderServico`(IN `tipoPagamento` INT, IN `valorDinheiro` FLOAT, IN `valorCartao` FLOAT, IN `funcionario` VARCHAR(30))
+begin
+
+	declare lastIdPagamento int;
+	insert into pagamento(Tipo, Valor_apagar, valor_dinheiro, valor_cartao) values(tipoPagamento, (valorDinheiro+valorCartao),
+    valorDinheiro, valorCartao);
+    set lastIdPagamento = (select max(ID) from pagamento);
+	
+    insert into venda_servico(venda_servico.Pagamento, 
+    venda_servico.funcionario, venda_servico.Data) 
+    values(lastIdPagamento, funcionario, curdate());
+end$$
+DELIMITER ;
